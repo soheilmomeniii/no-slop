@@ -1,0 +1,20 @@
+{
+  "name": "somo-writing-skills",
+  "owner": {
+    "name": "Soheil Momeni",
+    "url": "https://github.com/soheilmomeniii"
+  },
+  "description": "Writing skills that keep prose honest and free of AI texture.",
+  "plugins": [
+    {
+      "name": "no-slop",
+      "source": "./",
+      "description": "Write prose clean of AI texture, or audit a draft through a source-fidelity gate and a taste gate.",
+      "license": "MIT",
+      "category": "writing",
+      "keywords": ["writing", "editing", "de-slop", "ai-detection", "fact-checking", "prose"],
+      "skills": ["./skills/no-slop"],
+      "strict": false
+    }
+  ]
+}
