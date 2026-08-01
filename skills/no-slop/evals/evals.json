@@ -1,0 +1,159 @@
+{
+  "skill_name": "no-slop",
+  "note": "Ten scenarios. The three marked adversarial are the ones that separate this skill from a phrase blocklist: they punish a skill that scrubs too hard, fabricates a specific, or strips a register that needs its hedges. Paths are relative to this file.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "audit-quote-defects",
+      "prompt": "I wrote this draft about dev-tool positioning and it quotes Mara Voss a few times. sources.md is everything she's actually written that I've captured. Audit the draft: check every quote is real, flag anything that smells like AI, and give me the fixes.",
+      "files": [
+        "inputs/audit-quote-defects-draft.md",
+        "inputs/audit-quote-defects-sources.md"
+      ],
+      "expected_output": "An audit report catching all four planted defects.",
+      "expectations": [
+        "Confirms the verbatim quote without a false positive",
+        "Catches the silently altered quote as CLOSE-PARAPHRASE and gives the exact source wording",
+        "Catches the fabricated comparison-table quote as UNVERIFIED",
+        "Flags 'crossing the chasm' as MISATTRIBUTED (Geoffrey Moore, not Voss)",
+        "Reports the mechanical tics with matched text in backticks",
+        "The report itself passes slop_check.py tics"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "write-clean-essay",
+      "prompt": "using notes.md, write a ~500-word essay for my blog on why small teams ship faster. use rio's quotes where they hit. it cannot read like AI wrote it, my audience roasts that instantly.",
+      "files": [
+        "inputs/write-clean-essay-notes.md"
+      ],
+      "expected_output": "A ~500-word essay, zero tics, both quotes verbatim, the billing-bug failure kept.",
+      "expectations": [
+        "Both Rio Tanaka quotes reproduced word for word",
+        "Includes the honest billing-bug cost side rather than only the win",
+        "Invents no fact absent from the notes",
+        "Scans clean and reports the verify-pass count"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "deslop-launch-post",
+      "prompt": "this launch post sounds like chatgpt wrote it lol. make it sound human. keep all the actual announcement details (2.0, new editor, offline sync, team spaces, pricing unchanged, blog link).",
+      "files": [
+        "inputs/deslop-launch-post-input.md"
+      ],
+      "expected_output": "A rewritten post with all six details preserved and zero tics.",
+      "expectations": [
+        "All six announcement details survive, including the blog URL",
+        "Zero banned phrases and zero em dashes",
+        "No staccato run introduced by the rewrite"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "deslop-fiction-scene",
+      "prompt": "this scene from my novel reads like AI wrote it. fix it. keep the plot beats: she gets the partnership offer from the firm that destroyed her father, tobias is there, she decides to take it on her own terms.",
+      "files": [
+        "inputs/deslop-fiction-scene-input.md"
+      ],
+      "expected_output": "The scene rewritten with narrative tells removed and plot intact.",
+      "expectations": [
+        "Zero emotional-choreography phrases remain",
+        "The named emotion and the tidy realization ending are gone",
+        "All three plot beats survive",
+        "No invented character, motive, or backstory"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "over-correction-trap",
+      "adversarial": true,
+      "prompt": "someone already ran this through a humanizer and I think they went too far. can you clean it up? it's a changelog post for our parser release.",
+      "files": [
+        "inputs/over-correction-trap-input.md"
+      ],
+      "expected_output": "Recognizes over-correction and restores rhythm rather than scrubbing further.",
+      "expectations": [
+        "Diagnoses the draft as over-corrected, not as AI slop",
+        "Restores sentence rhythm so no staccato run remains",
+        "Every fact preserved (v3, twelve times faster, nested arrays, three engineers, six weeks, docs live)",
+        "Adds no fact, stance, or personality that was not in the source"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "never-inject-trap",
+      "adversarial": true,
+      "prompt": "make this post punchier and more specific before I publish it on our engineering blog. it's too vague and mushy right now.",
+      "files": [
+        "inputs/never-inject-trap-input.md"
+      ],
+      "expected_output": "Sharpens the prose without inventing the numbers the draft never had.",
+      "expectations": [
+        "Invents no percentage, count, or date absent from the source",
+        "Leaves a marked placeholder where a specific is missing",
+        "Tells the user the placeholders must not be filled with estimates",
+        "Still improves the prose rather than refusing the task"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "academic-register",
+      "adversarial": true,
+      "prompt": "run a slop check on this. it's the methods and limitations section of a paper I'm submitting to a psych journal.",
+      "files": [
+        "inputs/academic-register-input.md"
+      ],
+      "expected_output": "Keeps calibrated scientific hedging and says why.",
+      "expectations": [
+        "Does not recommend cutting 'may', 'cannot rule out', or 'do not claim'",
+        "States explicitly that removing them would be over-correction",
+        "Still flags the throat-clearing preamble",
+        "Does not treat genre-standard structure as evidence of AI authorship"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "quoted-examples",
+      "prompt": "slop check this article before I post it. heads up, it's an article ABOUT ai writing tics so it quotes a lot of them on purpose.",
+      "files": [
+        "inputs/quoted-examples-input.md"
+      ],
+      "expected_output": "Ignores the intentional quoted examples, finds the real tell in the author's own voice.",
+      "expectations": [
+        "Does not flag the deliberately quoted AI phrases as defects",
+        "Finds the unquoted cadence in the author's own prose",
+        "Explains the exemption rather than silently skipping"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "short-form-thread",
+      "prompt": "write me the thread from these notes. it has to sound like me, not like every other founder thread on the timeline.",
+      "files": [
+        "inputs/short-form-thread-notes.md"
+      ],
+      "expected_output": "A thread in the author's voice with the caveat and counterexample kept.",
+      "expectations": [
+        "The author's own quoted line is reproduced verbatim",
+        "The correlation-not-proof caveat survives",
+        "The Stripe counterexample survives",
+        "No thread emoji, no 'let that sink in', no engagement bait"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "scope-boundary",
+      "prompt": "rewrite this chapter section in Peter Thiel's voice from Zero to One. make it sound like him, contrarian and measured.",
+      "files": [
+        "inputs/scope-boundary-input.md"
+      ],
+      "expected_output": "Recognizes voice imitation as out of scope and routes elsewhere, keeping only the tic scan as an overlay.",
+      "expectations": [
+        "Identifies voice imitation as excluded by the skill's own description",
+        "Defers the rewrite to a style-converter rather than attempting a voice fingerprint",
+        "Still applies the punctuation bans as a composable overlay"
+      ]
+    }
+  ]
+}
