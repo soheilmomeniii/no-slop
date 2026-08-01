@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate SKILL.md against the agent-skills spec
+        run: python tools/validate_skills.py .
+
+      - name: Unit tests
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest skills/no-slop/tests -q
+
+      - name: The skill must pass its own rules
+        run: |
+          python skills/no-slop/scripts/slop_check.py tics \
+            skills/no-slop/SKILL.md \
+            skills/no-slop/README.md \
+            skills/no-slop/references/*.md \
+            README.md
+
+      - name: Every eval fixture referenced must exist
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path("skills/no-slop/evals")
+          data = json.loads((root / "evals.json").read_text())
+          missing = [f for e in data["evals"] for f in e.get("files", [])
+                     if not (root / f).exists()]
+          print(f"{len(data['evals'])} evals, {len(missing)} missing fixture(s)")
+          sys.exit(1 if missing else 0)
+          PY
