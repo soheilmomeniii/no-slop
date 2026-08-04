@@ -29,7 +29,9 @@ jobs:
             skills/no-slop/SKILL.md \
             skills/no-slop/README.md \
             skills/no-slop/references/*.md \
-            README.md
+            README.md \
+            CHANGELOG.md \
+            THIRD-PARTY-NOTICES.md
 
       - name: Every eval fixture referenced must exist
         run: |

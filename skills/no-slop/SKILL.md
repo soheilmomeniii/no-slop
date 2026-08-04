@@ -6,8 +6,9 @@ description: >-
   (every quoted or attributed line verified against primary sources, four verdicts,
   correction log) and taste (mechanical tell scan plus a nine-dimension scorecard). Use
   when the user says "de-slop this", "slop check", "AI smell", "sounds like ChatGPT",
-  "make it human", "kill the em dashes", "verify the quotes", "fidelity check", "run the
-  audit", or "taste pass", and when writing or rewriting X posts, threads, articles,
+  "make it human", "humanize this", "sounds robotic", "reads like AI", "kill the em
+  dashes", "verify the quotes", "fidelity check", "run the audit", or "taste pass", and
+  when writing or rewriting X posts, threads, articles,
   essays, fiction scenes, book chapters, or landing copy that must not read AI-generated.
   Works at any length; the fidelity gate activates whenever quotes or attributions are
   present. Do not use for voice imitation (use a style-converter skill), UI design, or
@@ -49,8 +50,19 @@ One tell might survive review; three brand the piece as generated. Do not write:
 - "That is..." as a sentence opener; "By understanding X, readers can..."
 - hedges: "arguably", "in many ways", "to some extent", "one could argue"
 - recap markers: "In short", "Ultimately", "At the end of the day", "In conclusion"
-- filler: `delve`, `leverage` (verb), `unlock`, `unpack`, `robust`, `seamless`, `game-changer`,
-  `deep dive`, `journey` (metaphorical), `empower`, `elevate`, `supercharge`
+- filler: `delve`, `leverage` (verb), `unpack`, `seamless`, `game-changer`, `deep dive`,
+  `empower`, `elevate`, `supercharge`, `unleash`
+- filler only in its filler frame, literal use is fine: `unlock the potential` (not a door),
+  `robust framework` (not robust standard errors), `the learning journey` (not a journey home),
+  `harness the power of` (not harness the energy of the jet stream). Cutting the literal use is
+  the over-correction this skill exists to prevent
+- stock flourishes: `a testament to`, `plays a crucial role` and every adjective in that slot,
+  `navigate the complexities`, `in an era of`, `in a world where`, `whether you're a...`,
+  `it's no secret`, `look no further`, `let's dive in`, `treasure trove`, `a beacon of`,
+  `tapestry of`, `in the realm of`
+- performed candor as filler: `let's be honest`, `let's be real`, `let's face it`, `real talk`,
+  `here's the thing`, `here's the kicker`, `here's the catch` (these are also injection
+  failures; see the rewrite constraints). `let us be clear` is formal register, not this
 - perfectly symmetrical sections; a generic recap after every section
 - fake-deep abstractions with no quote or case behind them; strategy-deck phrasing
 

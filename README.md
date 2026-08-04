@@ -10,6 +10,13 @@ Write prose clean of AI texture, or audit a draft until it survives scrutiny.
 npx skills add soheilmomeniii/no-slop
 ```
 
+Or as a Claude Code plugin:
+
+```
+/plugin marketplace add soheilmomeniii/no-slop
+/plugin install no-slop@somo-writing-skills
+```
+
 Every other de-slop skill removes AI tells. This one also checks whether the piece is telling
 the truth.
 
@@ -44,7 +51,11 @@ python skills/no-slop/scripts/slop_check.py quotes <draft.md> --corpus <sources-
 
 Pure Python, standard library only, no network, no subprocess, no shell. `tics` flags banned
 constructions and over-correction; `quotes` reports MATCH, PARTIAL, or NONE per quoted span
-against your sources and names the file each one matched. Exit codes are the contract: 0 clean,
+against your sources and names the file each one matched. It reads curly single quotes as well
+as double quotes, verifies an ellipsis-elided quote segment by segment, in order, inside one
+source file, refuses to call it verified when the ellipsis omits a negation (text-perfect and
+meaning-inverted is the misquote a fidelity gate exists to catch), and never counts the
+manuscript as part of its own corpus. Exit codes are the contract: 0 clean,
 1 findings, 2 error. Findings print to stdout, guidance to stderr, so the output pipes cleanly.
 
 Exempt spans are blanked before matching, so a draft may quote bad writing on purpose without
@@ -52,10 +63,11 @@ tripping the scan. The skill's own files pass their own scan, and a test enforce
 
 ## Evals
 
-Ten scenarios in `skills/no-slop/evals/`, with fixtures. Three are adversarial by design: they
-punish a skill that scrubs too hard, that invents a specific to sound punchier, or that strips
-hedges from an academic limitations section. On the run recorded in `CHANGELOG.md`, ten
-independent agents passed ten of ten.
+Eleven scenarios in `skills/no-slop/evals/`, with fixtures. Four are adversarial by design:
+they punish a skill that scrubs too hard, that invents a specific to sound punchier, that
+strips hedges from an academic limitations section, or that flags an honest ellipsis-elided
+quote while missing a real cross-source fusion. On the v1.4.0 run recorded in `CHANGELOG.md`,
+ten independent agents passed ten of ten.
 
 ## Layout
 
@@ -67,8 +79,8 @@ skills/no-slop/
 │   ├── fidelity-gate.md        Gate 1: verdicts, traps, correction log
 │   └── taste-gate.md           Gate 2: scorecard, verdict criteria, carve-outs
 ├── scripts/slop_check.py       the scanner
-├── tests/                      12 tests, including a self-scan gate
-└── evals/                      10 scenarios plus fixtures
+├── tests/                      28 tests, including a self-scan gate
+└── evals/                      11 scenarios plus fixtures
 tools/validate_skills.py        spec + security validator, run in CI
 ```
 

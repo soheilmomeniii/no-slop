@@ -1,6 +1,6 @@
 {
   "skill_name": "no-slop",
-  "note": "Ten scenarios. The three marked adversarial are the ones that separate this skill from a phrase blocklist: they punish a skill that scrubs too hard, fabricates a specific, or strips a register that needs its hedges. Paths are relative to this file.",
+  "note": "Eleven scenarios. The adversarial ones are what separate this skill from a phrase blocklist: they punish a skill that scrubs too hard, fabricates a specific, strips a register that needs its hedges, or flags an honest ellipsis-elided quote as a defect while missing a real cross-source fusion. Paths are relative to this file.",
   "evals": [
     {
       "id": 0,
@@ -153,6 +153,25 @@
         "Identifies voice imitation as excluded by the skill's own description",
         "Defers the rewrite to a style-converter rather than attempting a voice fingerprint",
         "Still applies the punctuation bans as a composable overlay"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "elided-quote-and-fusion",
+      "prompt": "gate 1 only this time. verify every quote in draft.md against the two source files. i pulled these fast from my notes app and one of them i'm not sure i copied right.",
+      "files": [
+        "inputs/elided-quote-draft.md",
+        "inputs/elided-quote-sources-memo.md",
+        "inputs/elided-quote-sources-talk.md"
+      ],
+      "expected_output": "A Gate 1 correction log: two quotes verified, one caught as fabricated fusion.",
+      "expectations": [
+        "Verifies the elided memo quote as legitimate, noting the ellipsis marks a real omission with both segments verbatim in one source",
+        "Does not 'fix' the honest elision by removing the ellipsis or calling it paraphrase drift",
+        "Extracts and verifies the curly-single-quoted pricing line rather than skipping it",
+        "Catches the final quote as fabricated fusion: two real sentences from different sources welded without an ellipsis, never said as a unit",
+        "Gives the split or corrected wording for the fused quote",
+        "The report itself passes slop_check.py tics"
       ]
     }
   ]

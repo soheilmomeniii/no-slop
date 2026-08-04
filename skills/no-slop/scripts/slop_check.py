@@ -7,6 +7,12 @@ Subcommands:
           staccato check that catches over-corrected, humanizer-flavored prose.
   quotes  Extract quoted spans from a manuscript and match them against a
           source corpus (normalized), reporting MATCH / PARTIAL / NONE.
+          Double quotes (straight or curly) and curly single quotes are both
+          extracted; straight single quotes never are, because apostrophes
+          make them unrecoverable by pattern. A quote elided with an ellipsis
+          is a MATCH only when every segment around the ellipsis is verbatim
+          in one source file; segments found only across different files are
+          a fusion and stay flagged.
 
 Exit codes are the parse contract: 0 clean, 1 findings present, 2 error.
 Findings go to stdout, one per line. Guidance and diagnostics go to stderr, so
@@ -41,13 +47,58 @@ FENCED_CODE = re.compile(r"^ {0,3}```.*?(?:^ {0,3}```|\Z)", re.M | re.S)
 BLOCKQUOTE_LINE = re.compile(r"^ {0,3}>.*$", re.M)
 INLINE_CODE = re.compile(r"`[^`\n]+`")
 # Deliberately never spans a newline: one unclosed quote would otherwise blank
-# the rest of the document and silently exempt it.
+# the rest of the document and silently exempt it. Wrapped quotes are still
+# handled, because the tic scan re-applies this per joined paragraph, where a
+# hard wrap has become an ordinary space.
 QUOTED_SPAN = re.compile(r"[“\"][^“”\"\n]{1,600}[”\"]")
+# Curly single quotes only. The closing mark must not be followed by a word
+# character, which is what separates a closing quote from an apostrophe
+# (the team’s plan). Straight single quotes are never treated as quotes:
+# plurals and decades ('80s) make them unrecoverable by pattern.
+SINGLE_QUOTED_SPAN = re.compile(r"‘[^‘\n]{1,600}?’(?!\w)")
 
 
 def _blank(m):
     """Replace every visible character with a space, preserving newlines."""
     return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def fold_apostrophes(text):
+    """Rewrite the typographic apostrophe as a straight one, same length.
+
+    Editors emit ’ by default, so patterns written with ' silently matched
+    nothing on most real drafts. Folding once here means every pattern can be
+    written with a plain apostrophe and still catch both forms, and character
+    offsets are preserved so line numbers and blanking stay exact. The curly
+    quote scans run before this, on the unfolded text, because they need ’ to
+    tell a closing quote from an apostrophe.
+    """
+    return text.replace("’", "'")
+
+
+DOUBLE_MARK = re.compile(r"[“”\"]")
+
+
+def unbalanced_doubles(text):
+    """True when a chunk holds an odd number of double-quote marks.
+
+    Blanking such a chunk would run from the stray mark to whatever mark comes
+    next, exempting prose that was never quoted. The old per-line rule bounded
+    that damage to one line; joining paragraphs removed the bound.
+    """
+    return len(DOUBLE_MARK.findall(text)) % 2 == 1
+
+
+def blank_quoted(text):
+    """Blank double- and single-curly-quoted spans within one paragraph.
+
+    A chunk with an odd number of double-quote marks is left alone: silently
+    exempting real prose is the worse failure, since an exemption hides tics
+    without ever printing a line.
+    """
+    if not unbalanced_doubles(text):
+        text = QUOTED_SPAN.sub(_blank, text)
+    return SINGLE_QUOTED_SPAN.sub(_blank, text)
 
 
 def apply_exemptions(text, include_quoted=False, code_only=False):
@@ -63,7 +114,7 @@ def apply_exemptions(text, include_quoted=False, code_only=False):
         return text
     text = BLOCKQUOTE_LINE.sub(_blank, text)
     if not include_quoted:
-        text = QUOTED_SPAN.sub(_blank, text)
+        text = blank_quoted(text)
     return text
 
 
@@ -83,41 +134,77 @@ TIC_PATTERNS = [
     ("'By understanding X...'", re.compile(r"\bby understanding [\w\s'-]{1,40}, (you|we|readers|founders|teams)\b", re.I)),
     ("hedge", re.compile(r"\b(arguably|in many ways|to some extent|one could argue)\b", re.I)),
     ("recap marker", re.compile(r"(?:(?<=[.!?] )|^)(in short|ultimately|at the end of the day|in conclusion)\b", re.I | re.M)),
-    ("filler vocab", re.compile(r"\b(delve|delves|delving|unpack(?:ing)?|game.?changer|deep.?dive|seamless(?:ly)?|supercharge[ds]?|empower(?:ing|s)?|elevate[sd]?)\b", re.I)),
+    ("filler vocab", re.compile(r"\b(delve|delves|delving|unpack(?:ing)?|game.?chang(?:er|ing)|deep.?dive|seamless(?:ly)?|supercharge[ds]?|empower(?:ing|s)?|elevate[sd]?|unleash(?:es|ed|ing)?)\b", re.I)),
     ("leverage-as-verb", re.compile(r"\bleverag(e[sd]?|ing)\b", re.I)),
+    ("'a testament to'", re.compile(r"\ba testament to\b", re.I)),
+    ("'plays a crucial role'", re.compile(r"\bplay(?:s|ed|ing)? an? (?:crucial|critical|pivotal|vital|key|significant|essential|integral) role\b", re.I)),
+    # Guarded like unlock and robust: the abstract object is the tell, so
+    # turbines that harness the energy of the jet stream stay clean.
+    # Guarded like unlock and robust: the abstract object is the tell. Turbines
+    # that harness the energy of the jet stream, and sailors who harness the
+    # forces on a hull, stay clean.
+    ("'harness the power'", re.compile(r"\bharness(?:es|ing)? the (?:power|potential|full potential|magic|collective \w+) of\b", re.I)),
+    ("'navigate the complexities'", re.compile(r"\bnavigat(?:e|es|ing) the (?:complexit|landscape|challenge|world of|waters of|intricac|nuances|ever.chang)", re.I)),
+    ("era opener", re.compile(r"\bin an era (?:of|where|when|defined by|marked by)\b|\bin a world where\b", re.I)),
+    ("'whether you're a ... or'", re.compile(r"\bwhether you(?:'| a)re an? [\w\s',-]{1,40}? or an? \w", re.I)),
+    ("'it's no secret'", re.compile(r"\bit(?:'| i)s no secret\b", re.I)),
+    ("'look no further'", re.compile(r"\blook no further\b", re.I)),
+    # "let us be clear" is ordinary formal register in legal and academic
+    # writing, so it is not in this list. The others perform candor instead of
+    # showing it.
+    ("performed candor", re.compile(r"\blet(?:'| u)s (?:be (?:honest|real)|face it)\b|\breal talk\b|\bhere(?:'| i)s the (?:thing|kicker|catch)\b", re.I)),
+    ("'let's dive in'", re.compile(r"\blet(?:'| u)s dive (?:in|into|right in|deeper)\b|\bdive into the world of\b", re.I)),
+    ("stock metaphor", re.compile(r"\btreasure trove\b|\ba beacon of\b|\b(?:rich )?tapestry of\b|\bin the realm of\b", re.I)),
+    ("unlock-the-potential", re.compile(r"\bunlock(?:s|ing|ed)? (?:the |your |its |their |a |new )?(?:full |true |real |hidden |untapped )?(?:potential|power|value|growth|insight|opportunit|possibilit|secret|benefit|capabilit)", re.I)),
+    ("metaphorical journey", re.compile(r"\b(?:learning|customer|user|personal|digital|transformation|entrepreneurial|startup|brand|wellness|fitness|career|writing|reading)(?:'s)? journey\b|\bjourney (?:of (?:self.)?discovery|to becoming|toward|towards)\b", re.I)),
+    ("robust-as-filler", re.compile(r"\brobust (?:framework|solution|approach|strateg|foundation|understanding|suite|ecosystem|pipeline|toolkit|set of)", re.I)),
     ("emotional choreography", re.compile(r"\b(breath (caught|catches|catching|hitched)|jaw (clenched|clenching|tightened)|stomach (dropped|drops|churned|twisted)|heart (hammered|hammering|pounded|pounding|raced|racing))\b", re.I)),
     ("named emotion", re.compile(r"\bfelt a (surge|wave|pang|rush|flicker|flash) of \w+", re.I)),
     ("tidy realization ending", re.compile(r"\bfor the first time,? (i|she|he|they) (truly )?(understood|realized|saw|felt)\b", re.I)),
 ]
 
-SKIP_LINE = re.compile(r"^\s*(?:[-*+>#|]|\d+[.)])")
+# A list marker needs the space that markdown requires after it, so a
+# paragraph opening with **bold** or *italic*, or a line starting with a bare
+# number like 1.5, is prose rather than structure. Without the space rule,
+# every bold-opening paragraph skipped paragraph joining, which quietly
+# re-opened the hard-wrap hole for exactly those paragraphs.
+SKIP_LINE = re.compile(r"^\s*(?:[-*+]\s|[>#|]|\d+[.)]\s)")
 
 
 def blocks(text):
-    """Yield (start_line, scannable_text).
+    """Yield (start_line, scannable_text, structural).
 
     Running prose is joined per paragraph so a cadence broken across a hard
-    wrap is still matched. Structural lines (list items, headings, tables) are
-    emitted individually so their line numbers stay exact.
+    wrap is still matched. A structural line (list item, heading, table row)
+    is joined with its indented continuation lines and flagged structural, so
+    a full bullet is matched as one unit but its short fragments never read
+    as prose to the staccato check.
     """
-    out, buf, start = [], [], None
+    out, buf, start, structural = [], [], None, False
+
+    def flush():
+        nonlocal buf, start, structural
+        if buf:
+            out.append((start, " ".join(buf), structural))
+        buf, start, structural = [], None, False
+
     for i, line in enumerate(text.splitlines(), 1):
         if not line.strip():
-            if buf:
-                out.append((start, " ".join(buf)))
-            buf, start = [], None
+            flush()
             continue
         if SKIP_LINE.match(line):
-            if buf:
-                out.append((start, " ".join(buf)))
-                buf, start = [], None
-            out.append((i, line))
+            flush()
+            buf, start, structural = [line.strip()], i, True
             continue
+        if structural and line[:1] in (" ", "\t"):
+            buf.append(line.strip())
+            continue
+        if structural:
+            flush()
         if start is None:
             start = i
         buf.append(line.strip())
-    if buf:
-        out.append((start, " ".join(buf)))
+    flush()
     return out
 
 
@@ -126,7 +213,11 @@ def blocks(text):
 # fingerprint: fragments, forced punch endings, every hedge stripped. Runs of
 # very short sentences are the mechanical signature of that failure.
 
-UNIT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+# Markup may sit between the terminator and the space: a bold pseudo-heading
+# ends `happens.**`, a parenthetical ends `(so far).`, a quotation ends `done."`
+# Without this, the heading swallows the sentence after it and a staccato run
+# hides inside the merged unit.
+UNIT_SPLIT = re.compile(r"(?<=[.!?])[*_)\]”\"’']*\s+")
 WORD = re.compile(r"[\w'’]+")
 ABBREV_END = re.compile(r"\b(?:mr|mrs|ms|dr|prof|st|jr|sr|no|fig|vs|cf|etc|al|e\.g|i\.e)\.$", re.I)
 
@@ -184,17 +275,38 @@ def scan_tics(paths, include_quoted=False):
     hits = 0
     for p in paths:
         raw = Path(p).read_text(encoding="utf-8", errors="replace")
-        text = apply_exemptions(raw, include_quoted=include_quoted)
-        for lineno, chunk in blocks(text):
+        # Code and blockquotes are line-anchored, so blank them on the full
+        # text. Quoted spans are blanked per joined paragraph instead, where a
+        # hard wrap has become an ordinary space, so a quotation broken across
+        # a line break is exempt exactly like a one-line quotation.
+        text = apply_exemptions(raw, include_quoted=True)
+        prose_chunks, stray = [], []
+        for lineno, chunk, structural in blocks(text):
+            if not include_quoted:
+                if unbalanced_doubles(chunk):
+                    stray.append(lineno)
+                chunk = blank_quoted(chunk)
+            # Fold ’ to ' after the quote-mark work, which needs the curly
+            # form, and before matching, which is written in straight ones.
+            chunk = fold_apostrophes(chunk)
+            if not structural:
+                prose_chunks.append(chunk)
             for label, pat in TIC_PATTERNS:
                 for m in pat.finditer(chunk):
                     hits += 1
                     print(f"{p}:{lineno} | {label} | {m.group(0).strip()!r}")
-        run, units = staccato_run(text)
+        run, units = staccato_run("\n".join(prose_chunks))
         if run:
             hits += 1
             print(f"{p} | over-correction (staccato run of {run}) | "
                   f"{' / '.join(units[:4])!r}")
+        if stray:
+            lines = ", ".join(str(n) for n in stray[:5])
+            print(f"slop_check: {p}: odd number of double-quote marks in the "
+                  f"paragraph(s) starting at line {lines}. Those paragraphs "
+                  f"were scanned in full rather than quote-exempted, so a "
+                  f"finding inside a quotation there is expected.",
+                  file=sys.stderr)
     print(f"\n{hits} tic(s) found." if hits else "Clean: 0 tics found.")
     return 1 if hits else 0
 
@@ -202,6 +314,24 @@ def scan_tics(paths, include_quoted=False):
 # -------------------------------------------------------------- quotes ----
 
 QUOTE_RE = re.compile(r'[“"]([^“”"]{12,600})[”"]')
+# Same apostrophe rule as the exemption pattern: a closing ’ followed by a
+# word character is an apostrophe, not a quote mark.
+SINGLE_QUOTE_RE = re.compile(r"‘([^‘]{12,600}?)’(?!\w)")
+# A quotation may wrap across a hard line break, so neither quote pattern can
+# forbid newlines. It may not cross a paragraph break: a span that does is an
+# unpaired mark reaching for the next one, which is how a lone elision
+# apostrophe (‘em) pairs with a possessive two paragraphs later and reports a
+# quotation the draft never contained.
+PARA_BREAK = re.compile(r"\n\s*\n")
+# An ellipsis inside a quotation marks a deliberate omission. Each segment
+# around it must still be verbatim, and in the same source file: segments that
+# only exist in different files are a fusion, not an elision.
+ELLIPSIS = re.compile(r"\[\s*(?:\.{3,}|…)\s*\]|\.{3,}|…")
+# Words whose removal reverses a sentence. Checked against what an ellipsis
+# actually omits in the source, not against the quote.
+NEGATION = re.compile(
+    r"\b(?:not|never|no|nor|none|without|unless|cannot|hardly|barely|rarely|"
+    r"\w+n['’]t)\b", re.I)
 
 
 def normalize(s: str) -> str:
@@ -214,16 +344,25 @@ def normalize(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def corpus_files(corpus: str):
+def corpus_files(corpus: str, exclude=None):
     """Normalized text per source file, so a quote cannot false-match across a
-    file boundary and so the matching file can be named in the correction log."""
+    file boundary and so the matching file can be named in the correction log.
+
+    exclude is the manuscript path: when the corpus directory contains the
+    manuscript itself, every quote would silently verify against its own text,
+    so the manuscript is never part of its own corpus."""
     path = Path(corpus)
+    skip = Path(exclude).resolve() if exclude else None
     if path.is_file():
+        if skip and path.resolve() == skip:
+            return {}
         return {path.name: normalize(path.read_text(encoding="utf-8", errors="replace"))}
     out = {}
     for f in sorted(path.rglob("*")):
         if any(part.startswith(".") for part in f.relative_to(path).parts):
             continue  # skip .git and other hidden trees
+        if skip and f.resolve() == skip:
+            continue
         if f.is_file() and f.suffix.lower() in {".md", ".txt", ".html", ".json", ".csv", ""}:
             out[str(f.relative_to(path))] = normalize(f.read_text(encoding="utf-8", errors="replace"))
     return out
@@ -234,11 +373,20 @@ def scan_quotes(manuscript: str, corpus: str, min_words: int) -> int:
     # Code only: blockquoted epigraphs are the highest-visibility quotes in a
     # piece, so they must stay visible to this scan.
     text = apply_exemptions(raw, code_only=True)
-    corp = corpus_files(corpus)
+    corp = corpus_files(corpus, exclude=manuscript)
     if not corp:
         print(f"slop_check: no readable corpus files under {corpus}", file=sys.stderr)
         return 2
-    spans = [m.group(1) for m in QUOTE_RE.finditer(text)]
+    found = [(m.start(), m.end(), m.group(1)) for m in QUOTE_RE.finditer(text)]
+    found += [(m.start(), m.end(), m.group(1)) for m in SINGLE_QUOTE_RE.finditer(text)]
+    found = [f for f in found if not PARA_BREAK.search(f[2])]
+    # A curly single quote nested inside a double quote is one quotation, not
+    # two. Counting it twice pads the verified ratio the correction log rests
+    # on, and does it exactly where a careful writer quotes a source quoting
+    # someone else.
+    outer = sorted(found)
+    spans = [s for a, b, s in outer
+             if not any(x < a and b <= y for x, y, _ in outer)]
     results = {"MATCH": 0, "PARTIAL": 0, "NONE": 0}
     skipped = 0
     for span in spans:
@@ -252,6 +400,48 @@ def scan_quotes(manuscript: str, corpus: str, min_words: int) -> int:
             if norm in body:
                 status, where = "MATCH", name
                 break
+        if status == "NONE" and ELLIPSIS.search(span):
+            # Every segment must be verbatim, in one file, in source order.
+            # Dropping short segments would leave the word a sentence turns on
+            # unchecked: "we are ... planning any layoffs" reads as verified
+            # against a source saying "we are not planning any layoffs".
+            # Order matters for the same reason: segments that appear in the
+            # file but not in sequence are a fusion wearing an ellipsis.
+            parts = [normalize(p) for p in ELLIPSIS.split(span)]
+            parts = [p for p in parts if p]
+            if len(parts) >= 2:
+                for name, body in corp.items():
+                    cursor, ok, gaps = 0, True, []
+                    for p in parts:
+                        at = body.find(p, cursor)
+                        if at < 0:
+                            ok = False
+                            break
+                        if cursor:
+                            gaps.append(body[cursor:at])
+                        cursor = at + len(p)
+                    if not ok:
+                        continue
+                    # An ellipsis that swallows a negation is formally legal
+                    # elision and substantively a misquote: "we are ...
+                    # planning any layoffs" against a source that says "we are
+                    # not planning any layoffs". So is a gap too small to be
+                    # worth eliding, which is the shape that trick takes. Both
+                    # verify as text and still need a human, which is what
+                    # PARTIAL means.
+                    swallowed = next((g for g in gaps if NEGATION.search(g)), None)
+                    if swallowed:
+                        cut = swallowed.strip()
+                        if len(cut) > 60:
+                            cut = f"{cut[:28]}...{cut[-28:]}"
+                        status = "PARTIAL"
+                        where = f"{name} (elision omits a negation: {cut!r})"
+                    elif any(len(g.split()) < 3 for g in gaps):
+                        status = "PARTIAL"
+                        where = f"{name} (elision omits under three words; check what)"
+                    else:
+                        status, where = "MATCH", f"{name} (elided)"
+                    break
         if status == "NONE":
             win = min(6, len(words))
             windows = [" ".join(words[i:i + win]) for i in range(0, max(1, len(words) - win + 1))]
@@ -260,7 +450,8 @@ def scan_quotes(manuscript: str, corpus: str, min_words: int) -> int:
                     status, where = "PARTIAL", name
                     break
         results[status] += 1
-        short = span if len(span) <= 90 else span[:87] + "..."
+        flat = re.sub(r"\s+", " ", span).strip()
+        short = flat if len(flat) <= 90 else flat[:87] + "..."
         suffix = f"  <- {where}" if where else ""
         print(f"[{status:7}] “{short}”{suffix}")
     total = sum(results.values())
@@ -270,8 +461,9 @@ def scan_quotes(manuscript: str, corpus: str, min_words: int) -> int:
         print(f"slop_check: {skipped} span(s) shorter than {min_words} words were not checked.",
               file=sys.stderr)
     if total == 0:
-        print("slop_check: no quoted spans extracted. If this draft uses single quotes or "
-              "curly quotes the scan checked nothing; verify by hand.", file=sys.stderr)
+        print("slop_check: no quoted spans extracted. Straight single quotes are never "
+              "treated as quote marks; if this draft uses them, the scan checked nothing "
+              "and every quote needs hand verification.", file=sys.stderr)
     if results["PARTIAL"] or results["NONE"]:
         print("PARTIAL = likely silent paraphrase drift; NONE = unverified or fabricated. "
               "Manually review every non-MATCH before assigning a verdict "

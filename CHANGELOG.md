@@ -1,5 +1,105 @@
 # Changelog
 
+## 1.5.1 (2026-08-04)
+
+Packaging and documentation only. No scanner behavior changed; the suite is unchanged at
+twenty-eight tests, all passing.
+
+### Added
+- `skills/no-slop/LICENSE`, so the MIT claim in `SKILL.md` travels with the distributed skill
+  instead of living only at the repo root.
+- A ten-second opener in the skill readme: one AI-texture paragraph before and after, then a
+  quotation welded from two real documents that a tell-hunting scanner reads as clean prose.
+  Both examples are literal, and both are fenced, so the skill still passes its own scan
+  without exempting itself.
+- A **Testing** section naming `pytest` as a development dependency and stating what the
+  scanner needs at runtime: the standard library, no network, no subprocess, no shell.
+
+### Fixed
+- The benchmark claim named a score with nothing in reach to check it against. It now points at
+  `evals/` and `CHANGELOG.md` and invites a rerun. The copy of the readme inside the packaged
+  skill, which ships without those directories, says so plainly rather than implying proof the
+  reader does not have.
+
+## 1.5.0 (2026-08-04)
+
+### Added
+- **Fourteen new tic patterns** covering the highest-frequency tells the scanner previously
+  missed entirely: `a testament to`, `plays a crucial role`, `harness the power of`,
+  `navigate the complexities`, era openers (`in an era of`, `in a world where`),
+  `whether you're a ... or`, `it's no secret`, `look no further`, `let's dive in`, performed
+  candor (`let's be honest`, `let's face it`, `real talk`, `here's the thing`), stock
+  metaphors (`treasure trove`, `a beacon of`, `tapestry of`, `in the realm of`), and
+  `unleash` plus `game-changing` in the filler set. A probe paragraph saturated with these
+  scanned clean before this release.
+- **Context-guarded enforcement of `unlock`, `journey`, and `robust`.** All three sat on the
+  banned list while the scanner never flagged them. They now match only in their filler frames
+  (`unlock the full potential`, `learning journey`, `robust framework`), so literal uses
+  (unlocking a door, a journey home, robust standard errors) stay clean.
+- **Curly single quotes are extracted by the quotes scan.** A closing mark followed by a word
+  character is read as an apostrophe, so `the team's plan` never fabricates a span. A real
+  quote set in curly singles previously checked nothing and exited 0, the worst kind of clean.
+- **Ellipsis-elided quotes verify segment by segment.** A quote with an honest omission is a
+  MATCH only when every segment around the ellipsis is verbatim in one source file, reported
+  as `(elided)`. Segments found only across different files are a fusion and stay flagged.
+  Legitimate elision previously reported PARTIAL, labeling correct quoting practice as
+  probable paraphrase drift.
+- **The manuscript is excluded from its own corpus.** Pointing `--corpus` at a directory
+  containing the draft made every quote verify against itself.
+- An eleventh eval, `elided-quote-and-fusion`: an honest elided quote and a curly-single quote
+  that must verify, plus a planted cross-source fusion that must be caught. Adversarial in
+  both directions.
+- **Typographic apostrophes are folded to straight ones before matching.** Patterns are written
+  with `'` and editors emit `'`, so on a draft out of Notion, Word or Docs the phrase set
+  matched nothing. Six of the new patterns were dead on arrival on most real prose.
+- **An elision that omits a negation is no longer a MATCH.** Every segment must be verbatim, in
+  one file, in source order, and the check now reads what the ellipsis actually skipped in the
+  source: `"we are ... planning any layoffs"` against a source saying "we are not planning any
+  layoffs" is text-perfect and means the opposite. A gap holding a negation, or one under three
+  words, reports PARTIAL and names what was cut. Ordering closes the same-file half of the
+  fusion hole, which the cross-file eval never touched.
+- **A paragraph with an odd number of double-quote marks is scanned in full**, and stderr names
+  it. Blanking from a stray mark to whatever mark came next exempted prose that was never
+  quoted; a silent exemption is worse than a false finding, because it never prints a line.
+- Sixteen regression tests; the suite is now twenty-eight.
+- The root readme documents the Claude Code marketplace install path, which shipped in 1.4.0
+  without a mention anywhere.
+
+### Fixed
+- **Bold-opening paragraphs skipped paragraph joining.** The structural-line check read the
+  `*` of `**bold**` as a list marker, so the 1.4.0 hard-wrap fix silently never applied to any
+  paragraph opening with emphasis, and a wrapped cadence inside one was invisible. List
+  markers now require the space markdown requires, which also stops a line starting with a
+  bare number like `1.5` from reading as a list item.
+- **A quotation wrapped across a hard line break lost its exemption.** Quoted-span blanking
+  ran per line, so a banned phrase inside a wrapped quote was flagged, the exemption-side twin
+  of the 1.4.0 matching fix. Blanking now runs per joined paragraph, where the wrap has become
+  a space.
+- **Structural lines rejoin their indented continuations.** A bullet is matched as one unit,
+  so a cadence broken across a bullet's wrap is caught, and its short fragments never read as
+  prose to the staccato check.
+- The quotes scan prints one finding per line even when the quoted span wraps in the draft,
+  keeping stdout to its parse contract.
+- The zero-spans warning no longer implies curly quotes were skipped; both curly forms are
+  extracted, and the warning now names the one true gap, straight single quotes.
+- **A quotation span no longer crosses a paragraph break.** A lone elision apostrophe (`'em`)
+  paired with a possessive two paragraphs later and reported a quotation the draft never
+  contained, failing the fidelity gate on a piece that quotes nobody.
+- **A curly single quote nested inside a double quote counts once.** Two result lines for one
+  quotation padded the verified ratio the correction log rests on, exactly where a careful
+  writer quotes a source quoting someone else.
+- **A bold pseudo-heading no longer swallows the sentence after it.** The sentence splitter
+  wanted `[.!?]` then whitespace, and `happens.**` has an asterisk in between, so a heading and
+  the run beneath it merged into one long unit and the over-correction check lost the run.
+- `plays a critical role`, the most common form of the phrase, was missing from that pattern.
+- `harness the energy of the jet stream` and `harness the forces on the hull` are literal and
+  now stay clean, guarded the same way `unlock`, `journey` and `robust` are. `let us be clear`
+  is formal register and left the performed-candor list.
+- SKILL.md and the scanner agree again about `unlock`, `journey` and `robust`. The doc listed
+  all three flatly while the scanner context-guarded them, so the rewriting agent, which reads
+  the doc and not the regexes, still stripped "unlock the door".
+- CI's self-scan gate now includes `CHANGELOG.md` and `THIRD-PARTY-NOTICES.md`.
+
 ## 1.4.0 (2026-08-01)
 
 First public release.
