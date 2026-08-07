@@ -150,7 +150,17 @@ python scripts/slop_check.py tics <draft.md>
 
 The scan blanks fenced code, inline code, blockquotes, and quoted spans before matching, so a
 draft may quote bad writing on purpose without tripping it. Pass `--include-quoted` to scan
-inside quotations too.
+inside quotations too. Two exceptions are deliberate. Chat-interface residue (`citeturn`,
+`utm_source=chatgpt.com`, `[Your Name]`) fires inside quotations as well, because it proves the
+quotation was pasted without being read, and it is marked `(P0)`: fix it before anything else.
+And findings marked `(1B)` are wordiness, not evidence about how the text was produced; report
+them separately and never count them toward AI texture.
+
+Findings carry a marker for why they fired: unmarked means on sight, `[tier 2]` means two or
+more landed in one paragraph, `[tier 2, N/1000]` or `[tier 3, N/1000]` means the document is
+saturated, and `rhythm uniformity` means sentence-length variation collapsed. Vocabulary is the
+weakest signal in the set and rhythm is the strongest, so weight the report that way.
+`references/taste-gate.md` has the full key.
 
 ## The verify loop (both modes)
 

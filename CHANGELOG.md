@@ -1,5 +1,89 @@
 # Changelog
 
+## 1.6.0 (2026-08-07)
+
+Built after reading six rival anti-slop skills end to end, including the only one that publishes
+a measured false-positive rate against a human control corpus. Its per-category numbers are the
+reason this release is shaped the way it is: on that corpus a rhythm-uniformity flag fired on
+2.1 percent of human documents and 25.1 percent of machine ones, while a vocabulary ban fired
+slightly more often on humans than on machines. So this release adds the rhythm measurement the
+scanner never had, and stops a single filler word from failing a draft.
+
+### Changed (breaking)
+
+- **Vocabulary bans now fire in tiers rather than on sight.** A single `seamless`, `leverage`,
+  `empower`, `robust framework`, or hedge no longer produces a finding. They fire when two or
+  more land in one paragraph (`[tier 2]`), or when the whole document is saturated: at least
+  three held hits and at least ten per thousand words (`[tier 2, N/1000]`). `journey` as a
+  metaphor moved further, to tier 3, which fires only above three per thousand words. Anyone
+  diffing output against 1.5.x will see hit counts drop on ordinary human prose, which is the
+  point: a report that fires on one word choice gets closed before the reader reaches the
+  fabricated quote on the next line.
+- **`delve` was split out of the filler list and kept firing on sight**, under its own label
+  `'delve'`. It is the one word on any published list with a real frequency gap and no innocent
+  single use. Consumers matching the literal label `filler vocab` for it must update.
+- **Output lines carry markers.** `[tier 2]`, `[tier 2, N/1000]`, `[tier 3, N/1000]`, `(1B)`,
+  and `(P0)` now appear in the category field, and `rhythm uniformity` is a new whole-document
+  line alongside the existing staccato line. Anything parsing scanner output needs updating. The
+  subcommands, the exit-code contract, and the stdout/stderr split are unchanged.
+
+### Added
+
+- **Paste tells, marked `(P0)`.** Chat-interface residue: `citeturn...`, `oai_citation`,
+  `contentReference[oaicite:N]`, `[attached_file:N]`, `grok_card`, `utm_source=chatgpt.com` and
+  its siblings, `[Your Name]`, `[INSERT ...]`, `2026-XX-XX`. These are evidence rather than
+  taste, so unlike every other pattern they fire inside quotations and blockquotes: a paste tell
+  in a quotation proves the quotation was pasted without being read. Exempt only in code, so
+  this repository can name them.
+- **Rhythm dispersion.** Sentence-length variation measured as the ratio of standard deviation
+  to mean, which is scale-free: a memo of short sentences has a small absolute spread for an
+  innocent reason, and an absolute floor flagged one of this repo's own clean fixtures on
+  exactly that mistake. Flags below a ratio of 0.40, or when 65 percent or more of sentences sit
+  between 12 and 26 words. Needs at least 12 sentences to say anything, and is suppressed when
+  the staccato run already fired, since both describe one document's rhythm and a report that
+  bills a defect twice invites the reader to discount the rest of it.
+- **A wordiness class, marked `(1B)`.** `utilize`, `in order to`, `a wide range of` at tier 2,
+  and `due to the fact that` on sight. These fire on ordinary human professional prose and say
+  nothing about how a text was produced, so they print under their own marker and must never be
+  counted toward AI texture. Presenting a wordiness fix as authorship evidence is the error the
+  marker exists to prevent.
+- **Participial editorializing**: a trailing `-ing` clause that tells the reader what the fact
+  they just read means (`, underscoring the importance of`). Restricted to the verbs that
+  editorialize, so `, using the` and `, following the` stay clean.
+- **Knowledge-gap speculation**: `while specific details are limited`, `is believed to have`,
+  `maintains a low public profile`, `based on available information`. Under this skill's own
+  never-inject rule these should have been a marked placeholder and a flagged gap, so naming
+  them turns an invisible violation into a printed line.
+- The `Reading the scan output` key in `references/taste-gate.md`, explaining what each marker
+  means and what to do with it, with a shorter version in `SKILL.md`.
+
+### Fixed
+
+- **A backticked span broken across a hard wrap was scanned as prose.** `INLINE_CODE` never
+  spans a newline and was applied only to the raw text, so the exemption missed any wrapped
+  span. The skill instructs auditors to render every matched span in backticks, and in an
+  eighty-column report a wrapped span is the normal case, not the edge case: audit reports were
+  failing their own scan on the tells they were reporting. Inline code is now blanked per joined
+  paragraph as well, where the wrap has become an ordinary space, guarded by an odd-backtick
+  check so one stray backtick cannot exempt a paragraph.
+
+### Tests
+
+Twenty-eight to fifty-three. The twenty-eight from 1.5.1 pass unmodified. One fixture inside the
+tier-3 density test was rewritten because its repetitive filler tripped the new rhythm check.
+Its assertions are unchanged.
+
+One eval fixture output changed: `audit-quote-defects-draft.md` goes from seventeen findings to
+eighteen, gaining the rhythm flag at a ratio of 0.37 across sixteen sentences. It is the fixture
+written to be slop, so this is coverage rather than a regression.
+
+### Known margin
+
+The dispersion threshold is tight. Across every fixture and this repository's own prose, clean
+writing measures between 0.44 and 0.76 and the slop fixture measures 0.37, so 0.40 separates
+them with less room than is comfortable. `references/taste-gate.md` itself sits at 0.44. Re-run
+the self-scan after editing it, and do not move the threshold without new corpus evidence.
+
 ## 1.5.1 (2026-08-04)
 
 Packaging and documentation only. No scanner behavior changed; the suite is unchanged at

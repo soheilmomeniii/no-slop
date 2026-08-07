@@ -79,7 +79,7 @@ skills/no-slop/
 │   ├── fidelity-gate.md        Gate 1: verdicts, traps, correction log
 │   └── taste-gate.md           Gate 2: scorecard, verdict criteria, carve-outs
 ├── scripts/slop_check.py       the scanner
-├── tests/                      28 tests, including a self-scan gate
+├── tests/                      53 tests, including a self-scan gate
 └── evals/                      11 scenarios plus fixtures
 tools/validate_skills.py        spec + security validator, run in CI
 ```

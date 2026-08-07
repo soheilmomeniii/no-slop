@@ -28,7 +28,23 @@ def run(argv):
 
 
 def labels(text):
-    return {label for label, pat in sc.TIC_PATTERNS for _ in pat.finditer(text)}
+    """Pattern-level match set, tier logic bypassed.
+
+    Tests that a regex sees what it should belong here. Tests that a tier
+    fires when it should go through scan_tics, which is where tiers live.
+    """
+    return {label for label, pat, _tier in sc.TIC_PATTERNS
+            for _ in pat.finditer(text)}
+
+
+def tier_of(label):
+    return next(t for lab, _p, t in sc.TIC_PATTERNS if lab == label)
+
+
+def scan(tmp_path, body, name="draft.md"):
+    f = tmp_path / name
+    f.write_text(body, encoding="utf-8")
+    return run(["tics", str(f)])
 
 
 def test_tics_catch_planted_tells():
@@ -319,3 +335,304 @@ def _tmp(content):
     p = Path(d) / "t.md"
     p.write_text(content)
     return str(p)
+
+
+# ---------------------------------------------------- wrapped inline code ----
+
+def test_backticked_span_broken_across_a_hard_wrap_is_exempt(tmp_path):
+    """The skill tells auditors to backtick every matched span, and an
+    eighty-column report wraps them. Before this, the report failed its own
+    scan on the tells it was reporting."""
+    body = (
+        "The draft opens with a stock flourish. The auditor quotes it back as\n"
+        "`in today's rapidly evolving landscape, teams delve into a testament\n"
+        "to synergy` and proposes a replacement.\n"
+    )
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+    assert out.strip().startswith("Clean")
+
+
+def test_unwrapped_version_of_the_same_span_still_fires(tmp_path):
+    body = ("The draft opens with a stock flourish. In today's rapidly evolving\n"
+            "landscape, teams delve into a testament to synergy.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "landscape opener" in out
+    assert "'delve'" in out
+
+
+def test_stray_backtick_does_not_exempt_the_paragraph(tmp_path):
+    """A lone backtick must not blank the rest of the paragraph. Silently
+    exempting real prose is the worse failure: it prints nothing at all."""
+    body = ("The config uses a ` character as its delimiter, which the team\n"
+            "called a testament to backwards compatibility.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "'a testament to'" in out
+
+
+# ------------------------------------------------------------ paste tells ----
+
+def test_paste_tells_fire(tmp_path):
+    body = (
+        "The report cites citeturn0search3 as its source.\n\n"
+        "See https://example.com/post?utm_source=chatgpt.com for the thread.\n\n"
+        "Sincerely,\n\n"
+        "The letter is signed [Your Name] and dated 2026-XX-XX.\n"
+    )
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "chat citation markup (P0)" in out
+    assert "AI referrer URL parameter (P0)" in out
+    assert out.count("unfilled placeholder (P0)") == 2
+
+
+def test_paste_tells_fire_inside_quotations_and_blockquotes(tmp_path):
+    """A paste tell inside a quotation proves the quotation was pasted
+    unread, so the quote exemption must not cover it."""
+    body = ('He wrote, "the filing is signed [Your Name] throughout".\n\n'
+            "> The appendix links to a page with utm_source=claude.ai in it.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "unfilled placeholder (P0)" in out
+    assert "AI referrer URL parameter (P0)" in out
+
+
+def test_paste_tells_are_exempt_inside_code(tmp_path):
+    """This file and the skill's own docs have to be able to name them."""
+    body = ("The scanner looks for `citeturn0search3` and for\n"
+            "`utm_source=chatgpt.com` in any URL.\n\n"
+            "```\ncurl 'https://x.test/a?utm_source=perplexity.ai'\n```\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_paste_tell_lookalikes_stay_clean(tmp_path):
+    body = ("The campaign used utm_source=newsletter for attribution, and the\n"
+            "embargo lifts 2019-05-XX per the partner sheet. Contact\n"
+            "[Marketing] with questions.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+# ----------------------------------------------------------------- tiers ----
+
+def test_tier_assignments():
+    assert tier_of("em dash") == 1
+    assert tier_of("'delve'") == 1
+    assert tier_of("hedge") == 2
+    assert tier_of("filler vocab") == 2
+    assert tier_of("robust-as-filler") == 2
+    assert tier_of("metaphorical journey") == 3
+
+
+def test_single_tier2_hit_does_not_fire(tmp_path):
+    """The change this release documents as breaking. One ordinary word used
+    as filler is a word choice, and a report that fires on it gets closed
+    before the reader reaches anything that matters."""
+    body = ("The team shipped a robust framework for reconciling invoices in\n"
+            "the second quarter, and the finance group signed off on it.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_two_tier2_hits_in_one_paragraph_fire_both(tmp_path):
+    body = ("The team shipped a robust framework that would empower the\n"
+            "finance group to reconcile invoices without a handoff.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "robust-as-filler [tier 2]" in out
+    assert "filler vocab [tier 2]" in out
+
+
+def test_tier2_hits_in_separate_paragraphs_stay_clean(tmp_path):
+    """The false positive tiering exists to kill. Both words are defensible
+    once; the paragraph is the unit a reader feels texture in."""
+    body = ("The migration was arguably premature, though the rollback plan\n"
+            "held and no customer data moved.\n\n"
+            "Reconciliation is seamless once both ledgers agree on a close\n"
+            "date, which took the team three quarters to negotiate.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_tier3_fires_only_above_density(tmp_path):
+    # Sentence lengths are varied on purpose: uniform filler would trip the
+    # rhythm check and mask what this test is actually pinning.
+    filler = ("The finance team closed the quarter on time. Reconciliation "
+              "between the two ledgers took eleven days, which was four days "
+              "longer than the plan allowed for and long enough that the "
+              "controller escalated it. Nobody minded. The vendor file "
+              "arrived late again, so the team rebuilt the mapping by hand "
+              "and shipped it anyway. Twice. What changed this quarter was "
+              "that the mapping is now checked into the repository where "
+              "anyone can read it, instead of living in one analyst's "
+              "spreadsheet. ")
+    sparse = "The customer journey is the frame the team uses. " + filler * 9
+    code, out, _ = scan(tmp_path, sparse, "sparse.md")
+    assert code == 0, out
+
+    dense = ("The customer journey and the user journey and the learning\n"
+             "journey each got a slide.\n")
+    code, out, _ = scan(tmp_path, dense, "dense.md")
+    assert code == 1
+    assert "[tier 3," in out
+
+
+# ------------------------------------------------- tier-2 doc backstop ----
+
+def test_backstop_fires_on_spread_filler_in_short_form(tmp_path):
+    """Bulleted and short-form writing puts one tell per paragraph by
+    construction. Without the backstop the worst prose scores cleanest."""
+    body = ("Shipping the new build today.\n\n"
+            "- Seamless offline sync for every device you own\n"
+            "- Team spaces that leverage what your colleagues already wrote\n"
+            "- Pricing that will supercharge the workflow at no extra cost\n\n"
+            "Great tools should empower the people using them.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert out.count("[tier 2, ") == 4
+
+
+def test_backstop_respects_the_minimum_count(tmp_path):
+    """Two spread hits in a short document clears the density bar on
+    arithmetic alone. Two is a word choice made twice."""
+    body = ("Reconciliation is seamless once both ledgers agree.\n\n"
+            "The rollout should empower the regional teams to close their\n"
+            "own books without waiting on head office.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_backstop_respects_the_density_bar(tmp_path):
+    """Three spread hits in a long document is not saturation."""
+    filler = ("The controller escalated the variance on the eleventh day. "
+              "Nobody minded. The vendor file arrived late again, so the team "
+              "rebuilt the mapping by hand and shipped it anyway. What "
+              "changed this quarter is that the mapping lives in the "
+              "repository where anyone can read it. ")
+    body = ("Reconciliation is seamless once both ledgers agree. " + filler * 4
+            + "\n\nThe rollout should empower regional teams. " + filler * 4
+            + "\n\nWe utilize the same mapping downstream. " + filler * 4)
+    code, out, _ = scan(tmp_path, body)
+    assert "[tier 2" not in out
+    assert code == 0, out
+
+
+def test_paragraph_rule_and_backstop_do_not_double_emit(tmp_path):
+    body = ("A robust framework that will empower the team shipped today.\n\n"
+            "Sync is seamless.\n\n"
+            "The rollout will supercharge onboarding.\n\n"
+            "We utilize the mapping downstream.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    lines = [l for l in out.splitlines() if "tier 2" in l]
+    assert len(lines) == len(set(lines))
+    assert sum(1 for l in lines if l.endswith("'empower'")) == 1
+
+
+# ----------------------------------------------------- new tic patterns ----
+
+def test_participial_editorializing(tmp_path):
+    body = ("Revenue grew nineteen percent, underscoring the importance of\n"
+            "the channel partnerships signed last spring.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "participial editorializing" in out
+
+
+def test_ordinary_trailing_participles_stay_clean(tmp_path):
+    """', using the' and ', following the' are ordinary subordination. The
+    pattern is restricted to the verbs that editorialize."""
+    body = ("The team rebuilt the mapping, using the vendor file from March,\n"
+            "and shipped it the same week.\n\n"
+            "She wrote the memo, following the outline the board approved.\n\n"
+            "The bridge was rebuilt, spanning the river at its narrowest.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_knowledge_gap_speculation(tmp_path):
+    body = ("While specific details are limited, the round is believed to\n"
+            "have closed in March.\n\n"
+            "The founder maintains a low public profile.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert out.count("knowledge-gap speculation") == 3
+
+
+def test_real_reported_uncertainty_stays_clean(tmp_path):
+    """Naming what you do not know, with the source, is the honest form the
+    skill asks for. Only the hedged non-report is the tell."""
+    body = ("The filing does not give a close date, and the company declined\n"
+            "to confirm one when asked on 3 March.\n\n"
+            "Two of the four investors would not comment on the valuation.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert code == 0, out
+
+
+def test_wordiness_labelled_1b_and_gated_at_tier_2(tmp_path):
+    """A wordiness fix is not evidence about how the text was produced, and
+    printing it as though it were is the error the split exists to prevent."""
+    assert tier_of("wordy: 'utilize'") == 2
+    assert tier_of("wordy: 'due to the fact that'") == 1
+
+    once = "The team will utilize the existing mapping for the March close.\n"
+    code, out, _ = scan(tmp_path, once, "once.md")
+    assert code == 0, out
+
+    twice = ("The team will utilize the existing mapping in order to close\n"
+             "March without a manual pass.\n")
+    code, out, _ = scan(tmp_path, twice, "twice.md")
+    assert code == 1
+    assert "(1B)" in out
+
+    always = "The close slipped due to the fact that the vendor file was late.\n"
+    code, out, _ = scan(tmp_path, always, "always.md")
+    assert code == 1
+    assert "wordy: 'due to the fact that' (1B)" in out
+
+
+# ------------------------------------------------------- rhythm variation ----
+
+def test_uniform_rhythm_is_flagged(tmp_path):
+    body = " ".join(
+        f"The team reviewed the {n} report and filed the summary on time."
+        for n in ["first", "second", "third", "fourth", "fifth", "sixth",
+                  "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
+                  "thirteenth", "fourteenth"]) + "\n"
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "rhythm uniformity" in out
+
+
+def test_varied_rhythm_is_clean(tmp_path):
+    body = ("The close slipped. Reconciliation between the two ledgers took "
+            "eleven days, four longer than the plan allowed and long enough "
+            "that the controller escalated it to the audit committee before "
+            "anyone had finished reading the variance memo. Nobody minded. "
+            "The vendor file arrived late again, so the team rebuilt the "
+            "mapping by hand. Twice. What changed is that the mapping now "
+            "lives in the repository where any analyst can read it, instead "
+            "of in one spreadsheet on one laptop. That is worth the eleven "
+            "days. The next close will tell us whether it holds.\n")
+    code, out, _ = scan(tmp_path, body)
+    assert "rhythm uniformity" not in out
+
+
+def test_staccato_suppresses_the_uniformity_flag(tmp_path):
+    """Both measure the same document's rhythm. Billing one defect twice
+    invites the reader to discount the rest of the report."""
+    body = " ".join(["Ship it.", "No meetings.", "Just results.", "Fast.",
+                     "Clean.", "Done.", "Simple.", "Three engineers.",
+                     "Six weeks.", "It worked.", "We shipped.", "Twice.",
+                     "Again.", "Better."]) + "\n"
+    code, out, _ = scan(tmp_path, body)
+    assert code == 1
+    assert "over-correction" in out
+    assert "rhythm uniformity" not in out
+
+
+def test_dispersion_needs_enough_sentences():
+    assert sc.dispersion("Short. Also short. Still short.") is None

@@ -17,7 +17,29 @@ separates them well. Score the rhythm dimensions with that in mind, and never te
 proves a text was generated.
 
 First run `scripts/slop_check.py tics` for the mechanical scan (banned phrases, dashes,
-cadences, narrative cliches), then score the nine dimensions, which need judgment:
+cadences, narrative cliches), then score the nine dimensions, which need judgment.
+
+**Reading the scan output.** A finding carries a marker saying why it fired, and the marker
+changes what you should do with it.
+
+- No marker: fired on sight. A construction with no innocent reading at any density.
+- `[tier 2]`: two or more of these landed in one paragraph. Ordinary words used as filler.
+  A single one is a word choice and is never printed.
+- `[tier 2, N/1000]`: fired on document saturation instead, because short-form and bulleted
+  writing puts one tell per paragraph by construction. Read it as a texture finding about the
+  whole piece, not as a verdict on the line it points at.
+- `[tier 3, N/1000]`: only the density was evidence. Weakest signal on the list.
+- `(1B)`: a wordiness fix, not authorship evidence. Report these under their own heading and
+  never count them toward AI texture. Presenting a wordiness fix as evidence about how a text
+  was produced is the error this marker exists to prevent.
+- `(P0)`: chat-interface residue. Fires inside quotations too, because a paste tell in a
+  quotation proves the quotation was pasted without being read. Fix before anything else.
+- `rhythm uniformity`: sentence-length variation collapsed relative to mean length, or most
+  sentences sit in one narrow band. This is the finding with the strongest evidence behind it
+  and it maps directly onto the rhythm variation dimension below. It is suppressed when the
+  staccato run already fired, since both describe the same document's rhythm.
+
+Then score the nine dimensions, which need judgment:
 
 | Dimension | 1 (fail) | 5 (pass) |
 |---|---|---|
